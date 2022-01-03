@@ -1,0 +1,424 @@
+------ PROTOCOALE DE COMUNICATIE ------
+--- Tema 3. Comunicatie cu REST API ---
+
+     _ __      _,.----.   
+  .-`.' ,`.  .' .' -   \  
+ /==/, -   \/==/  ,  ,-'  
+|==| _ .=. ||==|-   |  .  
+|==| , '=',||==|_   `-' \ 
+|==|-  '..' |==|   _  , | 
+|==|,  |    \==\.       / 
+/==/ - |     `-.`.___.-'  
+`--`---'                  
+
+Cuprins:
+	1. Biblioteci si macro-uri de baza...........Linia  35
+	2. Macro-uri comutative......................Linia  70
+	3. Modularizare..............................Linia  90
+		3.01. Fisierele "helpers.*"..............Linia  94
+		3.02. Fisierele "parson.*"...............Linia 111
+		3.03. Fisierele "buffer.*"...............Linia 125
+		3.04. Fisierele "requests.*".............Linia 133
+		3.05. Fisierele "prompts.*"..............Linia 175
+		3.06. Fisierele "commands_helpers.*".....Linia 207
+		3.07. Fisierele "commands_requests.*"....Linia 238
+		3.08. Fisierele "commands_follow.*"......Linia 276
+		3.09. Fisierele "commands.*".............Linia 295
+		3.10. Fisierele "client.*"...............Linia 381
+	4. Alte detalii..............................Linia 415
+
+
+=== ================================== ===
+=== 1. Biblioteci si macro-uri de baza ===
+=== ================================== ===
+
+In fisierul 'helpers.h' sunt prezente toate bibliotecile folosite in program.
+
+Se regasesc biblioteci standard pentru IO, lucru cu string-uri, functii
+standard (malloc, calloc, free, atoi) (std*.h)
+
+Se regasesc biblioteci pentru lucrul cu socket-uri si conexiune la internet
+(sys/*.h, netinet/*.h, arpa/*.h etc.)
+
+Sunt prezente diferite categorii de macro-uri:
+	String-uri constante si size-uri pentru uz general:
+		ex: HEADER_TERMINATOR, CRLF, BUFLEN, LINELEN
+
+	String-uri si constante pentru uz cu server-ul specificat in enunt:
+		ex: HOST_NAME 	- hostul propriu-zis
+			PORT 		- portul pe care serverul primeste conexiuni
+			PATH_*		- diferite path-uri ale server-ului
+
+	Macro-uri pentru lizibilitate
+		ex: TRUE si FALSE
+
+	Macro-ul LOG este discutat in sectiunea '2. Macro-uri comutative'.
+
+	Macro-ul DIE, conditionat, afiseaza o eroare si iese din program. Este
+	folosit in cazul erorilor ce compromit ireversibil functionalitatea
+	continua a programului, precum operatii legate de socket si conexiune.
+
+	Macro-ul GOOD este folosit doar pentru debugging. Diferenta fata de un
+	'printf' normal este ca GOOD este conditionat de valoarea lui LOG
+	(sectiunea '2. Macro-uri comutative')
+
+
+=== ======================= ===
+=== 2. Macro-uri comutative ===
+=== ======================= ===
+
+Este prezent un singur macro comutativ LOG, ce "activeaza" executia macro-ului
+GOOD.
+
+Valorea DEFAULT este FALSE.
+
+Setarea acestuia la TRUE face programul sa afiseze orice mesaj din GOOD prin
+care trece.
+
+Ca un avertisment, logging-ul creat de acestea este destul de prolix, intrucat
+se afiseaza multe informatii legate de executia programului (inclusiv
+mesaje intregi trimise catre server sau primite de la acesta).
+
+Este INDEPENDENT de logging-ul de baza necesar cerintei (precum modul in care
+s-a incheiat o functie - eroare/succes). Acesta este mereu afisat.
+
+
+=== =============== ===
+=== 3. Modularizare ===
+=== =============== ===
+
+--- --------------------------- ---
+--- 3.01. Fisierele "helpers.*" ---
+--- --------------------------- ---
+
+Dupa cum s-a discutat si in sectiunea '1. Biblioteci si macro-uri de baza',
+fisierul helpers.h prezinta toate bibliotecile necesare programului si
+macro-uri importante. Din aceasta cauza, helpers.h este inclus in orice alt
+fisier.
+
+Este prezenta si valoarea socket-ului pe care se lucreaza, 'sockfd'
+Intrucat ea se poate schimba oriunde in program si este folosita tot oriunde in
+program, aceasta este salvata global.
+
+Se regaseste o functie 'trim' ce primeste un string si returneaza un pointer
+catre partea string-ului ce nu are whitespaces la inceput sau la sfarsit.
+(Trim la whitespaces in ambele parti)
+
+--- -------------------------- ---
+--- 3.02. Fisierele "parson.*" ---
+--- -------------------------- ---
+
+Acestea sunt fisierele API-ului de parsare JSON recomandat in enunt.
+
+Am ales acest API intrucat are un approach usor de inteles cu obiecte,
+si, cel mai important, ofera foarte mici exemple pe repository-ul ei.
+
+Totodata, numele functiilor sunt sugestive. 'json_value_get_array' opereaza
+ASUPRA unui JSON VALUE, iar ceea ce face este RETURNEAZA UN ARRAY. M-a atras
+acest aspect, oricat de mic (nu intalnesti API-uri cu astfel de denumiri asa
+des).
+
+--- -------------------------- ---
+--- 3.03. Fisierele "buffer.*" ---
+--- -------------------------- ---
+
+Aferent laboratorului de HTTP, prezinta o structura folosita pentru
+receptionarea fragmentata a unui mesaj de la server. Fiecare fragment se adauga
+la buffer iar string-ul final este preluat din acesta.
+
+--- ---------------------------- ---
+--- 3.04. Fisierele "requests.*" ---
+--- ---------------------------- ---
+
+Aferent laboratorului de HTTP dar putin modificat.
+
+Functia 'compute_message'
+	Concateneaza in cel mai simplu mod posibil un string la un mesaj, adaugand,
+	totodata, CRLF la finalul acestuia
+
+Functia 'compute_get_request'
+	Spre deosebire de functia din laborator, aceasta primeste un singur cookie.
+
+	Totodata, ea primeste si un token care este adaugat header-ului
+	'Authorization', daca exista.
+
+Functia 'compute_post_request'
+	Spre deosebire de functia din laborator, aceasta primeste un singur cookie.
+
+	Totodata, ea primeste si un token care este adaugat header-ului
+	'Authorization', daca exista.
+	
+	In plus, 'data' de la finalul mesajului este un singur string, format
+	inainte de apelul functiei.
+
+Functia 'compute_delete_request'
+	Similara functiei 'compute_get_request', doar ca se aplica metoda DELETE
+
+Functia 'send_to_server'
+	Functie din laborator.
+
+	Trimite un intreg mesaj pe un socket. Se opreste doar daca server-ul nu
+	mai poate primi date sau s-a trimis intreg mesajul.
+
+Functia 'receive_from_server'
+	Functie din laborator.
+
+	Formeaza un buffer ce reprezinta raspunsul server-ului, acesta fiind
+	citit de pe socket-ul aferent.
+
+	Intoarce string-ul mesajului astfel primit.
+
+--- --------------------------- ---
+--- 3.05. Fisierele "prompts.*" ---
+--- --------------------------- ---
+
+Functii ce genereaza prompt-uri pentru utilizator pentru preluarea datelor.
+
+Functia 'userpass_prompt'
+	Preia de la utilizator un username si un password pentru a le combina
+	intr-un obiect JSON, ce urmeaza a fi folosit drept payload
+
+Functia 'books_prompt'
+	In functie de modul de adresare, formeaza un 'path' la care se va face
+	urmatorul request.
+
+	Modul de adresare este unul dintre macro-urile BOOKS_SINGLE si BOOKS_ALL,
+	prezente in fisierul 'prompts.h'
+
+	In cazul in care se doreste path-ul intregii biblioteci, acesta este deja
+	format intr-un macro din 'helpers.h' (PATH_LIB_BOOKS)
+
+	In cazul in care se doreste path-ul unei carti anume, se preia de la
+	utilizator ID-ul acesteia, urmand ca acesta sa fie concatenat la path-ul
+	antepus.
+
+Functia 'add_book_prompt'
+	Preia de la utilizator detaliile aferente unei carti, dupa care le combina
+	intr-un obiect JSON, ce urmeaza a fi folosit drept payload.
+
+	Functia esueaza daca nu s-a putut citi un input valid pentru un camp
+	(de exemplu, un numar de pagini care nu este numar sau nu este strict
+	pozitiv)
+
+--- ------------------------------------ ---
+--- 3.06. Fisierele "commands_helpers.*" ---
+--- ------------------------------------ ---
+
+Functii ce valideaza si modularizeaza codul aferent comenzilor principale.
+
+Functia 'get_error'
+	Folosita de functia 'check_code' (mai jos).
+
+	Extrage dintr-un raspuns mesajul de eroare prezent in obiectul JSON-ul din
+	payload.
+
+	Daca nu exista raspuns, sau nu exista obiect JSON, sau obiectul JSON este
+	invalid, functia esueaza.
+
+Functia 'check_code'
+	Verifica daca un raspuns de la server are codul asteptat.
+
+	Daca nu poate citi raspunsul, functia esueaza.
+
+	Daca nu corespunde codul raspunsului cu cel asteptat, se apeleaza
+	'get_error' pentru extragerea mesajului de eroare.
+
+Functia 'attempt_send'
+	Incearca repetitiv sa trimita un mesaj catre server SI sa primeasca un
+	mesaj nenul. In cazul receptionarii unui astfel de mesaj, se reincearca
+	conexiunea la server.
+
+	Acesti pasi se repeta de un numar limitat de ori, definit drept
+	MAX_ATTEMPTS in fisierul 'commands_helpers.h'
+
+--- ------------------------------------- ---
+--- 3.07. Fisierele "commands_requests.*" ---
+--- ------------------------------------- ---
+
+Functii ce creeaza si trimit request-uri aferente unei comenzi
+
+Toate functiile de mai jos includ, daca exista, cookie-ul de login (session ID)
+si header-ul cu token-ul JWT.
+
+Toate functiile de mai jos salveaza raspunsul primit in parametrul 'response'
+
+Functia 'userpass_post'
+	Formeaza de la input-ul utilizatorului un payload JSON cu un username si
+	un password.
+
+	Request-ul POST este format cu acel payload, dupa care este trimis la
+	path-ul specificat in parametri.
+
+Functia 'simple_get'
+	Formeaza si trimite un simplu request de tip GET la path-ul specificat in
+	parametri.
+
+Functia 'books_get'
+	Formeaza si trimite un request GET la path-ul stabilit de modul de adresare
+	primit ca parametru (path-ul catre intreaga biblioteca sau catre o singura
+	carte).
+
+Functia 'book_post'
+	Formeaza de la input-ul utilizatorului un payload JSON cu detaliile unei
+	carti ce urmeaza sa fie adaugata.
+
+	Request-ul POST este format cu acel payload, dupa care este trimis catre
+	path-ul bibliotecii.
+
+Functia 'book_delete'
+	Formeaza si trimite un request DELETE la path-ul cartii stabilite de
+	input-ul utilizatorului
+
+--- ----------------------------------- ---
+--- 3.08. Fisierele "commands_follow.*" ---
+--- ----------------------------------- ---
+
+Functii ce succeda operatiile unor comenzi specifice
+
+Functia 'extract_login_cookie'
+	Extrage cookie-ul prezent in header-ul raspunsului server-ului in urma
+	unui request de LOGIN
+
+Functia 'extract_jwt_token'
+	Extrage token-ul JWT prezent in payload-ul raspunsului server-ului in urma
+	unui request de acces la biblioteca
+
+Functia 'print_JSON'
+	Extrage array-ul JSON prezent in payload-ul raspunsului server-ului in urma
+	unui request de book/books, dupa care printeaza informatiile despre fiecare
+	carte (oricate ar fi) intr-un mod lizibil si user-friendly.
+
+--- ---------------------------- ---
+--- 3.09. Fisierele "commands.*" ---
+--- ---------------------------- ---
+
+In header, sunt prezente macro-uri pentru codurile asteptate de un anumit
+request, precum macro-urile COMMAND_ERROR si COMMAND_SUCCESS folosite aproape
+in toata executia programului pentru a semnala executia unei functii.
+
+Un COMMAND_ERROR se propaga in toate functiile din trace-ul celei in care
+s-a produs, similar unui try/catch.
+
+Din aceasta cauza se poate observa cum in unele parti din program se retine
+intr-o variabila statusul unei functii iar intreg codul este prezent in
+if-uri (exemple: functiile din 'commands.c' si 'commands_requests.c').
+
+Acest lucru se datoreaza lipsei blocurilor try/finally sau a unui garbage
+collector, intrucat functiile mentionate au conditii de eroare care intrerup
+executia lor, fiind necesara dezalocarea memoriei alocata dinamic pentru a
+evita memory leak-uri.
+
+Header-ul prezinta o structura de tip map ce face asocierea dintre un string
+si o functie. Este folosita in 'client.c' pentru a executa functia aferenta
+comenzii introduse de catre utilizator.
+
+Functia 'command_register'
+	Preia de la utilizator un username si un password pentru a le trimite
+	in path-ul de REGISTER catre server.
+
+	Verifica raspunsul serverului.
+
+Functia 'command_login'
+	Verifica daca utilizatorul este deja logat, caz in care nu se executa
+	functia.
+
+	Preia de la utilizator un username si un password pentru a le trimite
+	in path-ul de LOGIN catre server.
+
+	Verifica raspunsul serverului.
+
+	Daca este valid, se extrage cookie-ul ce contine session ID-ul de login,
+	pentru a demonstra ulterior ca utilizatorul este logat.
+
+Functia 'command_enter_library'
+	Trimite un request la path-ul de access la biblioteca catre server.
+
+	Verifica raspunsul serverului.
+
+	Daca este valid, se extrage token-ul JWT din payload-ul raspunsului,
+	pentru a demonstra ulterior ca utilizatorul are acces la biblioteca.
+
+Functia 'command_get_books'
+	Trimite un request la path-ul intregii biblioteci catre server.
+
+	Verifica raspunsul serverului.
+
+	Daca este valid, se extrage array-ul JSON din payload-ul raspunsului si
+	afiseaza, in mod lizibil, detaliile despre toate cartile din raspuns.
+
+Functia 'command_get_single_book'
+	Preia de la utilizator un id pentru a trimite un request la path-ul
+	cartii asociate catre server.
+
+	Verifica raspunsul serverului.
+
+	Daca este valid, se extrage array-ul JSON din payload-ul raspunsului si
+	afiseaza, in mod lizibil, detaliile despre cartea primita in raspuns.
+
+Functia 'command_add_book'
+	Preia de la utilizator detaliile unei noi carti ce urmeaza sa fie adaugata
+	la biblioteca, dupa care trimite acest request catre server.
+
+	Verifica raspunsul serverului.
+
+Functia 'command_delete_book'
+	Preia de la utilizator un id pentru a trimite un request la path-ul
+	cartii asociate ce urmeaza sa fie stearsa.
+
+	Verifica raspunsul serverului.
+
+Functia 'command_logout'
+	Trimite un request la path-ul de LOGOUT catre server.
+
+	Verifica raspunsul serverului.
+
+	Reseteaza cookie-ul de session ID si token-ul JWT
+
+--- -------------------------- ---
+--- 3.10. Fisierele "client.*" ---
+--- -------------------------- ---
+
+Sunt salvate detaliile utilizatorului precum cookie-ul de session ID si
+token-ul JWT in 'login_cookie' si 'jwt_token'.
+
+Functia 'is_logged_in'
+	Verifica existenta cookie-ului de session ID (login_cookie)
+
+Functia 'has_lib_access'
+	Verifica existenta token-ului JWT (jwt_token)
+
+Functia 'init_connection'
+	Creeaza un nou socket pentru a se conecta catre server-ul dat de parametrul
+	"name" (ale carui detalii se afla) pe portul "port".
+
+	Functia este folosita la initializarea programului precum si la
+	reconectarea clientului la server daca nu se poate primi un mesaj concret.
+
+Functia 'run_client'
+	Se stabilesc functiile pe care utilizatorul le poate executa, dupa care
+	se asteapta input de la user pentru o astfel de functie.
+
+	La intalnirea comenzii "exit", se opreste acest ciclu de rulare.
+
+	La intalnirea unei comenzi inexistente, utilizatorul este notificat cu
+	privire la acest fapt.
+
+Functia 'main'
+	Se initializeaza conexiunea cu serverul, dupa care incepe ciclul de rulare
+	al programului.
+
+
+=== =============== ===
+=== 4. Alte detalii ===
+=== =============== ===
+
+Am incercat o abordare foarte sensibila la erori, iar inexistenta blocurilor
+try/finally au dus la utilizarea unor functii ce returneaza mereu un status
+de succes sau de eroare, iar eventualele alocari sau modificari ce ar fi
+trebuit sa fie returnate de functii au devenit parametri pentru acestea.
+
+Totodata, in urma interventiilor (nu neaparat ale mele) de pe forum, am luat
+decizia ca erorile ce puteau fi detectate de client... sa nu fie detectate de
+client. De exemplu, un 'get_books' fara un 'enter_library' precedent va trimite
+un request fara token JWT catre server, bineinteles returnandu-se un mesaj de
+eroare ce semnaleaza lipsa acestuia.
